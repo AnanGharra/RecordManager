@@ -150,31 +150,25 @@ Delete(){
 }
 
 
-# Searches for a record by name (Or part of it), returns a list of all the records that contain the name provided.
-Search(){
-    local name=$(name_validate)
-    local results_array=()
-    # local results_sorted=()
-    local search_results=""
-    local sorted=""
 
-    search_results=$(grep "$name" "$file")
-    if [ -n "$search_results" ]; then
-        sorted=$(echo $search_results | tr ' ' '\n' | sort)
-        for i in $sorted; do
-            results_array+=("$i")
-        done
-        log_event $FUNCNAME Success
-    else
-        echo "[!] Record Not Found."
+# Searches for a record by name (Or part of it), returns a list of all the records that contain the name provided.
+Search() {
+    local name=$(name_validate)  # Assuming name_validate gets the search term
+
+    # Perform case-insensitive search and format output
+    local results=$(grep -i "$name" "$file" | awk -F', ' '{print NR") "$1", "$2}')
+
+    # Check if any results were found
+    if [[ -z "$results" ]]; then
+        echo "[!] No records found containing '$name'."
         log_event $FUNCNAME Failure
+    else
+        # Print formatted results
+        echo "$results"
+        log_event $FUNCNAME Success
     fi
 
-    for record in "${results_array[@]}"; do
-        echo "$record"
-    done
-
-    menu
+  menu
 }
 
 
