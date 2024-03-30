@@ -1,18 +1,20 @@
 #!/bin/bash
 
-# Global variable that holds the data base file path.
+
+# Global variable to save the name of the file that have been passed as argument by the use.
 file=$1
 
 
+################################## Main Menu ##################################
+################################## User Interface ##################################
 
-############################################################# MENU INTERFACE #############################################################
 
-
-
-# Lists the menu interface of the Record Manager for the user.
-menu(){
-    # local action name amount entry
-    file_check
+Menu(){
+    # local chosenAction
+    # local inputString
+    # local inputAmount
+    # local chosenEntry
+    CheckFile
     local file_update=""
     file_update=$(cat $file)
 
@@ -52,111 +54,114 @@ menu(){
 }
 
 
-
-############################################################# MENU FUNCTIONS #############################################################
-
+################################## Main Menu Functions ##################################
 
 
-# Adds a new record to the DB if it doesn't exist, updates the amount if it already exists
+# Adds a new record to the DB if it doesn't exist, updates the amount if it already exists.
 Insert(){
-    local name=0
+    local name=""
     local amount=0
-    local option=""
-    local num=0
+    local selected_record=""
     local status=0
-
+    
     while [[ $status -eq 0 ]]; do
         echo "[!] What would you like to do?"
-        echo "1) Add a new record."
+        echo "1) Add new record."
         echo "2) Add copies to existing record."
-        read -p "[!] Enter you choice number: " num
+        read -p "[!] Enter your choice number: " num
 
         if [[ $num -eq 1 ]]; then
             name=$(name_validate)
             amount=$(amount_validate)
+            find_line=$(grep -w "^$name," "$file")
 
-            result=`grep ^"$name" "$file"`
-            while [ -n "$result" ]; do
+            while [ -n "$find_line" ]; do 
                 echo "[!] A record with the same name already exists."
                 name=$(name_validate)
-                result=`grep ^"$name" "$file"`
+                find_line=$(grep -w "^$name," "$file")
             done
 
-            log_event $FUNCNAME Success
             echo "$name, $amount" >> $file
             echo "[!] A new record has been added."
+            log_event $FUNCNAME Success
             status=1
+
         elif [[ $num -eq 2 ]]; then
             name=$(name_validate)
             amount=$(amount_validate)
-            list_records $name option
+            ListRecords "$name" selected_record
 
-            declare old_amount=`echo "$option" | awk -F', ' '{print $2}'`
-            let amount_to_add=$amount
-            declare new_amount=$((old_amount+amount_to_add))
-            curr_name=`echo "$option" | awk -F', ' '{print $1}'`
-            new_record=`echo $curr_name, $new_amount`
+            local old_amount=$(echo "$selected_record" | awk -F', ' '{print $2}')
+            local new_amount=$((old_amount + amount))
+            local new_record=$(echo "$selected_record" | awk -F', ' '{print $1}')
 
-            sed -i "s/$option/$new_record/g" $file
-            echo "[!] Record Added Successfully"
+            # Use a safe sed replacement with variables.
+            sed -i "s/^$selected_record\$/$new_record, $new_amount/" $file
+
+            echo "[!] Copies added successfully to $new_record, total is now $new_amount."
             log_event $FUNCNAME Success
             status=1
+
         else
-            echo "[!] Invalid Option! Please choose and option from the list."
-            status=0
+            echo "[!] Invalid option. Please choose one from the list."
             log_event $FUNCNAME Failure
         fi
     done
-    menu
-}
 
-
-# Deletes a record, or some copies from it.
-Delete(){
-    local name=$(name_validate)
-    local amount=$(amount_validate)
-    local full_name
-    local curr_name=""
-    local curr_amount=""
-    local check=1
-    list_records $name full_name
-    curr_name=$(echo $full_name | awk -F', ' '{print $1}')
-    curr_amount=$(echo $full_name | awk -F', ' '{print $2}')
-
-    while [ $check -eq 1 ]; do
-        if [[ $amount -le $curr_amount ]]; then
-            check=1
-            let new_amount=($curr_amount - $amount)
-            echo $new_amount
-            if [[ $new_amount -gt 0 ]]; then
-                sed -i "s/$full_name/$curr_name, $new_amount/g" $file
-                echo "[!] The new copies amount of $curr_name has been updated to $new_amount."
-                check=0
-                log_event $FUNCNAME Success
-            else [[ "$new_amount" -eq 0 ]]
-                sed -i "s/$full_name/d" $file
-                echo "[!] All the copies of $full_name has been deleted."
-                log_event $FUNCNAME  Success
-            fi
-        else
-            echo "[!] Can't delete more copies than we already have."
-            check=1
-            log_event $FUNCNAME Failure
-            echo "[!] The copies amount of $full_name is $curr_amount, How many would you like to delete?"
-            amount=$(amount_validate $option)
-        fi
-    done
-    menu
+    Menu
 }
 
 
 
 # Searches for a record by name (Or part of it), returns a list of all the records that contain the name provided.
-Search() {
-    local name=$(name_validate)  # Assuming name_validate gets the search term
+Delete() {
+    local term=$(name_validate)
+    local amount=$(amount_validate)    # Amount to delete.
+    local full_record
+    local curr_name=""
+    local curr_amount=""
+    local check=1 # Incorrect, enters while loop.
+
+    ListRecords "$term" full_record
+    curr_name=$(echo "$full_record" | awk -F', ' '{print $1}')
+    curr_amount=$(echo "$full_record" | awk -F', ' '{print $2}')
+
+    echo "[!] You have selected $curr_name with $curr_amount copies"
+
+    while [ $check -eq 1 ]; do # Runs as long as the input is incorrect.
+        # Check if choice is validate.
+        if [[ $amount -le $curr_amount ]]; then
+            check=0  # Correct, exits while loop.
+            # Subtracting amount of copies.
+            let new_amount=($curr_amount - $amount)
+            if [[ "$new_amount" -gt 0 ]]; then
+                # Use a different delimiter and properly quote variables.
+                sed -i "s|$curr_name, $curr_amount|$curr_name, $new_amount|g" $file
+                echo "[!] The new copies amount of $curr_name is $new_amount"
+                log_event $FUNCNAME Success
+            else [[ "$new_amount" -eq 0 ]]
+                sed -i "/^$curr_name, $curr_amount$/d" $file
+                echo "[!] You have deleted all the copies of $curr_name"
+                log_event $FUNCNAME Success
+            fi
+        else
+            echo "[!] Cannot delete more copies than we already have."
+            check=1
+            log_event $FUNCNAME Failure
+            echo "[!] How many copies would you like to delete? - Max is $curr_amount"
+            amount=$(amount_validate)
+        fi
+    done
+    Menu
+}
+  
+
+# Searches for a record by name (Or part of it), returns a list of all the records that contain the name provided.
+Search(){
+    local name=$(name_validate)
 
     # Perform case-insensitive search and format output
-    local results=$(grep -i "$name" "$file" | awk -F', ' '{print NR") "$1", "$2}')
+    local results=$(grep -i "$name" "$file" | sort | awk -F', ' '{print NR") "$1", "$2}')
 
     # Check if any results were found
     if [[ -z "$results" ]]; then
@@ -168,40 +173,81 @@ Search() {
         log_event $FUNCNAME Success
     fi
 
-  menu
+  Menu
 }
 
 
 # Updates a record name, provided by the user.
 UpdateName(){
     local name=""
-    local full_name=""
+    local full_record=""
     local search_term=$(name_validate)
-    list_records $search_term $full_name
+    ListRecords "$search_term" full_record
     local is_new=1
-    local line=""
-    local curr_name=$(echo $full_name | awk -F', ' '{print $1}')
-    local curr_amount=$(echo $full_name | awk -F', ' '{print $2}')
-    while [[ $in_new -eq 1 ]]; do
+    local line_search=""
+    local curr_name=$(echo "$full_record" | awk -F', ' '{print $1}')
+    local curr_amount=$(echo "$full_record" | awk -F', ' '{print $2}')
+    while [[ $is_new -eq 1 ]]; do
         name=$(name_validate)
         is_new=0
-        local line=`grep -w $name $file`
-        if [[ -z $line ]]; then
-            echo "[!] A record with that name already exists."
+        line_search=$(grep -w "$name" "$file")
+        if [[ ! -z $line_search ]]; then
+            echo "[!] A record with that name already exists. Please choose a different name."
             is_new=1
         fi
     done
-    if sed -i "s/$curr_name/$name/g" "$file"; then
+
+    local temp_file=$(mktemp)
+    while IFS= read -r line; do
+        local line_name=$(echo "$line" | awk -F', ' '{print $1}')
+        if [[ "$line_name" == "$curr_name" ]]; then
+            echo "$name, $curr_amount" >> "$temp_file"
+        else
+            echo "$line" >> "$temp_file"
+        fi
+    done < "$file"
+
+    mv "$temp_file" "$file" # Replace the original file with the temp file
+
+    if [[ $? -eq 0 ]]; then
         log_event $FUNCNAME Success
     else
         log_event $FUNCNAME Failure
     fi
-
-    menu
+    Menu
 }
 
 
- 
+# Updates the copies amount of a certain record, provided by the use.
+UpdateAmount() {
+    local search_term=$(name_validate)  # User inputs the search term for the record.
+    local new_amount=$(amount_validate)  # User inputs the new amount.
+    local full_record=""
+    
+    # ListRecords to let the user select a record based on the search term.
+    ListRecords "$search_term" full_record  
+    
+    if [[ -z "$full_record" ]]; then
+        echo "Operation cancelled or no matching records found."
+        return
+    fi
+
+    # Extract the current name and amount from the selected record.
+    local curr_name=$(echo "$full_record" | awk -F', ' '{print $1}')
+    local curr_amount=$(echo "$full_record" | awk -F', ' '{print $2}')
+    
+    # Replace the old amount with the new amount while keeping the name unchanged.
+    if sed -i "/^$curr_name, $curr_amount$/s/$curr_amount/$new_amount/" "$file"; then
+        echo "[!] The amount for '$curr_name' has been updated successfully to $new_amount."
+        log_event $FUNCNAME Success 
+    else
+        echo "Failed to update the amount for '$curr_name'."
+        log_event $FUNCNAME Failure
+    fi
+    Menu
+}
+
+
 # Prints all the copies amount in the DB
 PrintAmount(){
     local all_records=$(sort $file)
@@ -217,8 +263,9 @@ PrintAmount(){
         echo "[!] That databse is empty."
         log_event $FUNCNAME Failure
     fi
-    menu
+    Menu
 }
+
 
 # Prints all the records in the DB in a sorted way.
 PrintAll(){
@@ -234,32 +281,32 @@ PrintAll(){
         echo "[!] The database is empty."
         log_event $FUNCNAME Failure 
     fi
-    menu
+    Menu
 }
 
 
-
-############################################################# HELPERS FUNCTIONS #############################################################
-
+################################## Helping Methods ##################################
 
 
 # Checks if the DB file already exists, if not, ask the user if he wants to proceed and create one.
-file_check(){
+CheckFile (){
     if ! [ -f $file ]; then
-        read -p "[!] The current file does not exist. Do you wish to create it?[y/n]" ans
-        ans=$(echo $ans | tr '[:upper:]' '[:lower:]')
-        case $ans in
-            yes|y)
-                touch $file;;
-            no|n) 
-                echo "[!] The file was not created. Thank you... :)"
-                exit;;
+        read -p '[!] File does not exist! Do you want to proceed tp create it?[y/n]' answer
+        answer=$( echo $answer | tr '[:upper:]' '[:lower:]')
+        case $answer in
+            yes | y)
+                touch $file
+                echo "[!] file created successfully!";;
+            no | n)
+                echo file wasnt created! thank you and good-bye
+                exit 0 ;;
             *)
-                echo "[!] Invalid option. Please enter y for yes and n for no"
-                exit;;
+                echo "[!] not valid input, please try again."
+                exit 0 ;;
         esac
     fi
 }
+
 
 # Asks the user to enter a record name and validates it.
 name_validate(){
@@ -276,7 +323,7 @@ name_validate(){
         fi
     done
     echo $name
-}
+} 
 
 
 # Asks the user in enter the copies amount and validates it - positive, greater than 0.
@@ -302,13 +349,13 @@ log_event(){
     local fun=$1
     local status1=$2
     local status2=$3
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - " $fun $status1 $status2 >> "$file"_log.txt
+    echo "$(date '+%Y-%m-%d %H:%M:%S') -" $fun $status1 $status2 >> "$file"_log.txt
     status2=""
 }
 
 
-# Searches for the record name in the DB, and returns all the records that contain the name provided as a numbered list.
-list_records(){
+# Lists all the records to the user that contain a certain word of a record name, provide by the user.
+ListRecords(){
     local final_result=""
     local search_term=$1
     local return_val=$2
@@ -317,58 +364,44 @@ list_records(){
     local num=0
     local counter=1
     local status=1
-    local reg='^[0-9]+$'
-    local i=""
-    local file_read=1
-    while [[ $status -eq 1 ]]; do
-        while [[ $file_read -eq 1 ]]; do
-            search_results=$(grep -i "$search_term" "$file")
-            while IFS= read -r line; do
-                results_array+=("$line")
-            done < <(grep -i "$search_term" "$file")
-            file_read=0
-        done
-        counter=1 
-        num=0
-        # printf "%s\n" "${results_array[@]}"
+    local num_check='^[0-9]+$'
 
-        if [[ ${#results_array[@]} -eq 1 ]]; then
-            echo "[!] Results Found: "
-            echo "${results_array[0]}"
-            status=0
-            num=0
-            # log_event $FUNCNAME Success
-        elif [[ ${#results_array[@]} -eq 0 ]]; then
-            echo "[!] No Records Found."
+    # While loop until the user chooses the correct option
+    status=1
+    local read_status=1
+    while [[ $status -eq 1 ]]; do
+    # Read file line by line using grep and add all the results to the array
+        while [[ $read_status -eq 1 ]]; do
+            search_result=$(grep -i "$search_term" "$file")
+            IFS=$'\n' read -r -d '' -a results_array <<< "$search_result"
+            read_status=0  # Finished reading file, exiting while
+        done 
+        counter=1
+        num=0
+        if [[ ${#results_array[@]} -eq 1 ]]; then   # Checking if only one value in array
+            echo "[!] Result found: ${results_array[0]}"
+            num=0 
+            status=0 # Exits while loop
+        elif  [[ ${#results_array[@]} -eq 0 ]]; then  # Checking if no values in array
+            echo "No matching results"
             search_term=$(name_validate)
         else
-            for record in "${results_array[@]}"; do
-                echo "$counter) $record"
-                let counter=($counter+1)
+            for value in "${results_array[@]}"; do
+                echo "$counter) $value"
+                let "counter=($counter+1)"
             done
-            let counter=($counter+1)
-            read -rp "[!] Please enter the record number from the list: " num
-            if [[ $num =~ $reg ]] && [[ $num -lt $counter ]] && [[ $num -gt 0 ]]; then
+            let "counter=($counter-1)"
+            read -rp "[!] Please choose an option: " num      
+            if [[ $num =~ $num_check ]] && [[ $num -le $counter ]] && [[ $num -gt 0 ]]; then
                 let num=$num-1
-                # log_event $FUNCNAME Success
                 status=0
             else
-                echo "[!] Invalid option. Please choose a record number from the list."
-                # log $FUNCNAME Failure
+                echo "[!] Invalid option. Please choose one from the list."
             fi
         fi
     done
     final_result="${results_array[$num]}"
-    # eval $return_val="'$final_result'"
-    echo "$final_results"
+    eval $return_val="'$final_result'"
 }
 
-
-menu
-
-
-
-
-
-
-
+Menu
