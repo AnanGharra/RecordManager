@@ -4,15 +4,13 @@
 
 <h2>🧐 Features</h2>
 
-Here're some of the project's best features:
-
-*   Add a record
-*   Delete a record
-*   Search for a record
-*   Update record's name
-*   Updates copies amount
-*   Print total copies amount
-*   Print all records
+*   **Add a record:** Adds a new record to the DB, or add more copies to an existing record.
+*   **Delete a record:** Deletes a record from the DB, or few copies.
+*   **Search for a record:** Searches for a name or partial name in the DB.
+*   **Update record's name:** Updates an existing record's name.
+*   **Updates copies amount:** Updates an existing record's copies amount.
+*   **Print total copies amount:** Prints the total amount of copies in the DB
+*   **Print all records:** Prints all the records in the DB.
 
 <h2>🛠️ Installation Steps:</h2>
 
